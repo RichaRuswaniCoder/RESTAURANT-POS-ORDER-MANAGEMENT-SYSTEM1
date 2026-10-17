@@ -1,0 +1,13 @@
+{
+  "name": "restaurant-pos-order-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Restaurant POS hiring assignment monorepo. Install and run frontend/backend in their own folders.",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend test",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build"
+  }
+}

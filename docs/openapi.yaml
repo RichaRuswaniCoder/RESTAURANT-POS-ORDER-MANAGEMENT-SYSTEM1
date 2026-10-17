@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Restaurant POS & Order Management API
+  version: 1.0.0
+  description: API documentation for the hiring assignment. Money values are in INR. Browser requests must send credentials to use the HttpOnly accessToken cookie.
+servers:
+  - url: http://localhost:5000
+    description: Local development
+paths:
+  /api/health:
+    get:
+      summary: Check API health
+      responses:
+        '200': { description: API is running }
+  /api/auth/login:
+    post:
+      summary: Sign in and set the accessToken cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1 }
+      responses:
+        '200': { description: Signed in; accessToken cookie is set }
+        '400': { description: Invalid request }
+        '401': { description: Invalid credentials }
+  /api/auth/me:
+    get:
+      security: [{ accessToken: [] }]
+      summary: Get the current authenticated user
+      responses:
+        '200': { description: Current user returned }
+        '401': { description: Missing or invalid session }
+  /api/auth/logout:
+    post:
+      summary: Clear the accessToken cookie
+      responses:
+        '200': { description: Signed out }
+  /api/menu:
+    get:
+      security: [{ accessToken: [] }]
+      summary: List menu items
+      responses:
+        '200': { description: Menu item list }
+    post:
+      security: [{ accessToken: [] }]
+      summary: Create menu item (Admin only)
+      x-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category, price]
+              properties:
+                name: { type: string, minLength: 2 }
+                category: { type: string }
+                price: { type: number, minimum: 0 }
+                description: { type: string }
+                imageUrl: { type: string }
+                isAvailable: { type: boolean }
+      responses:
+        '201': { description: Menu item created }
+        '403': { description: Admin access required }
+  /api/menu/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    put:
+      security: [{ accessToken: [] }]
+      summary: Update menu item (Admin only)
+      x-roles: [admin]
+      responses:
+        '200': { description: Menu item updated }
+        '400': { description: Invalid fields or ID }
+        '404': { description: Menu item not found }
+    delete:
+      security: [{ accessToken: [] }]
+      summary: Permanently delete menu item (Admin only; prefer deactivation in the UI)
+      x-roles: [admin]
+      responses:
+        '200': { description: Menu item deleted }
+  /api/orders:
+    get:
+      security: [{ accessToken: [] }]
+      summary: List latest orders (up to 500)
+      responses:
+        '200': { description: Orders returned }
+    post:
+      security: [{ accessToken: [] }]
+      summary: Create an order and calculate its bill on the server
+      description: Client sends menu item IDs and quantities only. Server looks up prices, rejects unavailable items, applies configured tax and discount limits, and generates an order number.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                orderType: { type: string, enum: [dine-in, takeaway] }
+                customerName: { type: string, maxLength: 100 }
+                tableNumber: { type: string, maxLength: 20 }
+                discountPercent: { type: number, minimum: 0 }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [menuItem, quantity]
+                    properties:
+                      menuItem: { type: string, description: MongoDB ObjectId }
+                      quantity: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '201': { description: Order created with server-calculated bill }
+        '400': { description: Invalid request, unavailable item, or invalid discount }
+  /api/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      security: [{ accessToken: [] }]
+      summary: Get one order
+      responses:
+        '200': { description: Order returned }
+        '404': { description: Order not found }
+  /api/orders/{id}/invoice:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      security: [{ accessToken: [] }]
+      summary: Generate invoice data for an order
+      responses:
+        '200': { description: Invoice data returned }
+  /api/orders/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    patch:
+      security: [{ accessToken: [] }]
+      summary: Update order status using the workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [pending, preparing, ready, completed, cancelled] }
+      responses:
+        '200': { description: Order status updated }
+        '409': { description: Invalid status transition }
+  /api/orders/{id}/payment:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    patch:
+      security: [{ accessToken: [] }]
+      summary: Record Cash or UPI payment (authenticated Admin or Staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentStatus, paymentMethod]
+              properties:
+                paymentStatus: { type: string, enum: [paid] }
+                paymentMethod: { type: string, enum: [cash, upi] }
+      responses:
+        '200': { description: Payment recorded }
+        '400': { description: Invalid payment or cancelled order }
+        '409': { description: Order is already paid }
+  /api/reports/daily-sales:
+    get:
+      security: [{ accessToken: [] }]
+      summary: Daily sales report (Admin only)
+      x-roles: [admin]
+      parameters:
+        - in: query
+          name: date
+          required: false
+          schema: { type: string, format: date }
+          description: UTC calendar date; defaults to current UTC date.
+      responses:
+        '200': { description: Daily order totals and paid sales breakdown }
+        '400': { description: Invalid date }
+        '403': { description: Admin access required }
+components:
+  securitySchemes:
+    accessToken:
+      type: apiKey
+      in: cookie
+      name: accessToken
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
